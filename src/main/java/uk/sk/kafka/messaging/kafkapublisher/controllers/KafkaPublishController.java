@@ -20,67 +20,79 @@ import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import uk.sk.kafka.messaging.kafkapublisher.pojos.Application;
 import uk.sk.kafka.messaging.kafkapublisher.pojos.Customer;
+import uk.sk.kafka.messaging.kafkapublisher.service.KafkaService;
 
-@Api(value="Kafka Publisher service")
+@Api(value = "Kafka Publisher service")
 @RestController
 public class KafkaPublishController {
 	Logger logger = LoggerFactory.getLogger(this.getClass());
+
+	@Autowired
+	@Qualifier("customerPublisherTemplate")
+	private KafkaTemplate<String, Customer> customerTemplate;
 	
-	@Autowired @Qualifier("customerPublisherTemplate") private KafkaTemplate<String, Customer> customerTemplate;
-	@Autowired @Qualifier("applicationPublisherTemplate") private KafkaTemplate<String, Application> applicationTemplate;
+	@Autowired
+	@Qualifier("applicationPublisherTemplate")
+	private KafkaTemplate<String, Application> applicationTemplate;
 	
-	
+	@Autowired
+	private KafkaService kafkaService;
+
 	private ProducerRecord<String, Customer> createCustomerMessage(Customer customer) {
 		return new ProducerRecord<String, Customer>("CUSTOMER", customer);
 	}
-	
-	@ApiOperation(value = "Get the heart beat!",response = String.class)
-	@RequestMapping(method= {RequestMethod.GET}, path="/heartbeat")
+
+	@ApiOperation(value = "Get the heart beat!", response = String.class)
+	@RequestMapping(method = { RequestMethod.GET }, path = "/heartbeat")
 	public ResponseEntity<?> ping() {
 		return new ResponseEntity<String>("Success", HttpStatus.OK);
 	}
-	
-	@ApiOperation(value = "Publish the customer to kafka broker",response = String.class)
-	@RequestMapping(method= {RequestMethod.POST}, path="/publishCust", consumes="application/json")
-	public ResponseEntity<?> publishCustomer(@RequestBody Customer value) {
-		ListenableFuture<SendResult<String, Customer>> lFuture = customerTemplate.send(createCustomerMessage(value));
+
+	@ApiOperation(value = "Publish the customer to kafka broker", response = String.class)
+	@RequestMapping(method = { RequestMethod.POST }, path = "/publishCust", consumes = "application/json")
+	public ResponseEntity<?> publishCustomer(@RequestBody Customer customer) {
+		ListenableFuture<SendResult<String, Customer>> lFuture = customerTemplate.send(createCustomerMessage(customer));
 		lFuture.addCallback(new ListenableFutureCallback<SendResult<String, Customer>>() {
-			
-		    @Override
-		    public void onFailure(Throwable ex) {
-		    	logger.info("Failure received (CUSTOMER) in (ListenableFuture): "+ ex.getMessage());
-		    }
+
+			@Override
+			public void onFailure(Throwable ex) {
+				logger.info("Failure received (CUSTOMER) in (ListenableFuture): " + ex.getMessage());
+			}
 
 			@Override
 			public void onSuccess(SendResult<String, Customer> arg0) {
-				logger.info("Success received (CUSTOMER) in (ListenableFuture): "+ arg0.getProducerRecord().topic());
+				logger.info("Success received (CUSTOMER) in (ListenableFuture): " + arg0.getProducerRecord().topic());
 			}
 
 		});
+		kafkaService.publishToElastic(customer);
 		return new ResponseEntity<String>("Success", HttpStatus.ACCEPTED);
 	}
-	
+
 	private ProducerRecord<String, Application> createApplicationMessage(Application application) {
 		return new ProducerRecord<String, Application>("APPLICATION", application);
 	}
-	
-	@ApiOperation(value = "Publish the application to kafka broker",response = String.class)
-	@RequestMapping(method= {RequestMethod.POST}, path="/publishApp", consumes="application/json")
+
+	@ApiOperation(value = "Publish the application to kafka broker", response = String.class)
+	@RequestMapping(method = { RequestMethod.POST }, path = "/publishApp", consumes = "application/json")
 	public ResponseEntity<?> publishApplication(@RequestBody Application application) {
-		ListenableFuture<SendResult<String, Application>> lFuture = applicationTemplate.send(createApplicationMessage(application));
+		ListenableFuture<SendResult<String, Application>> lFuture = applicationTemplate
+				.send(createApplicationMessage(application));
 		lFuture.addCallback(new ListenableFutureCallback<SendResult<String, Application>>() {
-			
-		    @Override
-		    public void onFailure(Throwable ex) {
-		    	logger.info("Failure received (APPLICATION) in (ListenableFuture): "+ ex.getMessage());
-		    }
+
+			@Override
+			public void onFailure(Throwable ex) {
+				logger.info("Failure received (APPLICATION) in (ListenableFuture): " + ex.getMessage());
+			}
 
 			@Override
 			public void onSuccess(SendResult<String, Application> arg0) {
-				logger.info("Success received (APPLICATION) in (ListenableFuture): "+ arg0.getProducerRecord().topic());
+				logger.info(
+						"Success received (APPLICATION) in (ListenableFuture): " + arg0.getProducerRecord().topic());
 			}
 
 		});
+		kafkaService.publishToElastic(application);
 		return new ResponseEntity<String>("Success", HttpStatus.ACCEPTED);
 	}
 }
